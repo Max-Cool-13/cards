@@ -3,7 +3,7 @@ services:
     name: cards
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "pip install -r requirements_card.txt"
     startCommand: "python card.py"
     dockerCommand: ""   # отключает Poetry
     envVars:
