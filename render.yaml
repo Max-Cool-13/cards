@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: telegram-card-bot
+    name: cards
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python card.py"
+    dockerCommand: ""   # отключает Poetry
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.7
