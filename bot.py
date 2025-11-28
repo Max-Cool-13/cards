@@ -16,8 +16,8 @@ from telegram.ext import (
 )
 
 # Получаем конфиг из env
-TOKEN = os.getenv("8548721313:AAF-AzsSNVieZbb_9kB_vBsnv3m9Op255Gw")
-MANAGER_ID = os.getenv("399920862")  # строка, затем конвертим
+TOKEN = os.getenv("TOKEN")
+MANAGER_ID = os.getenv("MANAGER_ID")  # строка, затем конвертим
 
 if not TOKEN:
     raise RuntimeError("TOKEN env var is required (get it from @BotFather)")
