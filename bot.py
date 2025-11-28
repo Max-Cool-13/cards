@@ -1,293 +1,251 @@
-# bot.py
 import os
 import asyncio
-from typing import Dict, Any
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 
-from telegram import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Update,
-)
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-)
-
-# Получаем конфиг из env
+# ================================
+# ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ (Render)
+# ================================
 TOKEN = os.getenv("TOKEN")
-MANAGER_ID = os.getenv("MANAGER_ID")  # строка, затем конвертим
+MANAGER_ID = os.getenv("MANAGER_ID")
 
 if not TOKEN:
-    raise RuntimeError("TOKEN env var is required (get it from @BotFather)")
+    raise RuntimeError("ERROR: TOKEN environment variable is missing!")
+if not MANAGER_ID:
+    raise RuntimeError("ERROR: MANAGER_ID environment variable is missing!")
 
-try:
-    MANAGER_ID = int(MANAGER_ID) if MANAGER_ID else None
-except Exception:
-    MANAGER_ID = None
+MANAGER_ID = int(MANAGER_ID)
 
-# Оперативная история (в памяти)
-REQUEST_HISTORY: list[str] = []
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-# ------------ Клавиатуры ------------
-def main_menu() -> InlineKeyboardMarkup:
-    kb = [
-        [InlineKeyboardButton("📌 Типы карт", callback_data="types")],
-        [InlineKeyboardButton("🌍 Для чего они нужны?", callback_data="purposes")],
-        [InlineKeyboardButton("❓ Частые вопросы", callback_data="faq")],
-        [InlineKeyboardButton("👨‍💼 Перевести на менеджера", callback_data="manager")],
-        [InlineKeyboardButton("🎯 Подбор карты", callback_data="choose_start")],
-    ]
-    return InlineKeyboardMarkup(kb)
+# История заявок
+REQUEST_HISTORY = []
 
 
-def back_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅ Назад", callback_data="back")]])
+# ---------- Главное меню ----------
+def main_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📌 Типы карт", callback_data="types")],
+        [InlineKeyboardButton(text="🌍 Для чего они нужны?", callback_data="purposes")],
+        [InlineKeyboardButton(text="❓ Частые вопросы", callback_data="faq")],
+        [InlineKeyboardButton(text="👨‍💼 Написать менеджеру", callback_data="manager")],
+        [InlineKeyboardButton(text="🎯 Подбор карты", callback_data="choose_start")],
+    ])
 
 
-# ------------ Хэндлеры ------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start"""
-    await update.message.reply_text(
+def back_button():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="back")]
+    ])
+
+
+# ---------- START ----------
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    await message.answer(
         "Здравствуйте! Выберите раздел ниже:",
         reply_markup=main_menu()
     )
 
 
-async def types_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
+# =====================================================
+# 1. Типы карт
+# =====================================================
+@dp.callback_query(lambda c: c.data == "types")
+async def types_info(call: types.CallbackQuery):
+
     text = (
-        "📌 *Типы карт*\n\n"
-        "🔹 *Виртуальные* — быстро и удобно для онлайн-покупок и подписок.\n"
-        "🔹 *Пластиковые* — подходят для офлайн-оплат и банкоматов.\n"
-        "🔹 *Мультивалютные* — удобны если нужна поддержка USD/EUR и т.п.\n\n"
-        "_(Тексты можно редактировать под конкретные продукты)_"
+        "📌 <b>Типы карт</b>\n\n"
+        "🔹 Виртуальные — удобны для подписок и онлайн оплаты.\n"
+        "🔹 Пластиковые — подходят для офлайн магазинов и банкоматов.\n"
+        "🔹 Мультивалютные — удобно для сервисов США/ЕС.\n"
     )
-    await update.callback_query.edit_message_text(text, reply_markup=back_kb(), parse_mode="Markdown")
+
+    await call.message.edit_text(text, reply_markup=back_button(), parse_mode="HTML")
 
 
-async def purposes_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
+# =====================================================
+# 2. Для чего нужны
+# =====================================================
+@dp.callback_query(lambda c: c.data == "purposes")
+async def purposes_info(call: types.CallbackQuery):
+
     text = (
-        "🌍 *Для чего нужны зарубежные карты?*\n\n"
-        "✔ Оплата зарубежных сервисов (Netflix, Steam, магазины)\n"
-        "✔ Подписки (Google, Apple, Spotify и др.)\n"
-        "✔ Интернет-покупки (Amazon, eBay)\n"
-        "✔ Рекламные кабинеты (Google Ads, Meta Ads)\n"
-        "✔ Удобство при поездках и владение валютой\n\n"
-        "_(Уточни условия для каждой конкретной карты)_"
+        "🌍 <b>Для чего нужны зарубежные карты?</b>\n\n"
+        "✔ Оплата зарубежных сервисов\n"
+        "✔ Подписки (Google, Apple, Netflix, Steam)\n"
+        "✔ Онлайн-магазины (Amazon и др.)\n"
+        "✔ Реклама (Meta Ads, Google Ads)\n"
+        "✔ Путешествия и поездки\n"
+        "✔ Экономия на комиссиях\n"
     )
-    await update.callback_query.edit_message_text(text, reply_markup=back_kb(), parse_mode="Markdown")
+
+    await call.message.edit_text(text, reply_markup=back_button(), parse_mode="HTML")
 
 
-async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
+# =====================================================
+# 3. FAQ
+# =====================================================
+@dp.callback_query(lambda c: c.data == "faq")
+async def faq_info(call: types.CallbackQuery):
+
     text = (
-        "❓ *Частые вопросы*\n\n"
-        "🔸 *Можно ли пополнять карту?* — Зависит от продукта.\n"
-        "🔸 *Работает ли в РФ?* — В онлайне чаще всего да.\n"
-        "🔸 *Нужен ли паспорт?* — Иногда, в зависимости от KYC.\n"
-        "🔸 *Подходит ли для подписок?* — Да, виртуальные карты часто удобны.\n\n"
-        "_(Добавь конкретные ответы по своим картам)_"
+        "❓ <b>Частые вопросы:</b>\n\n"
+        "🔸 Можно ли пополнять карту? — Да, зависит от типа.\n"
+        "🔸 Работает ли в РФ? — В онлайне да.\n"
+        "🔸 Нужен ли паспорт? — Для некоторых — да.\n"
+        "🔸 Подходит ли для подписок? — Да.\n"
     )
-    await update.callback_query.edit_message_text(text, reply_markup=back_kb(), parse_mode="Markdown")
+
+    await call.message.edit_text(text, reply_markup=back_button(), parse_mode="HTML")
 
 
-async def manager_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    user = update.effective_user
-    # уведомление менеджеру
-    summary = f"📩 Запрос от @{user.username if user.username else user.full_name} (ID: {user.id})"
-    if MANAGER_ID:
-        try:
-            await context.bot.send_message(MANAGER_ID, summary)
-        except Exception as e:
-            # не критично — продолжаем, но логируем в чат пользователя
-            await update.callback_query.message.reply_text(
-                f"Ошибка уведомления менеджера: {e}\nПроверь MANAGER_ID."
-            )
+# =====================================================
+# 4. Связь с менеджером
+# =====================================================
+@dp.callback_query(lambda c: c.data == "manager")
+async def contact_manager(call: types.CallbackQuery):
+
+    await bot.send_message(
+        MANAGER_ID,
+        f"📩 Новый запрос от @{call.from_user.username} (ID: {call.from_user.id})"
+    )
+
+    text = (
+        "👨‍💼 Ваш запрос отправлен менеджеру.\n"
+        "Он свяжется с вами в ближайшее время."
+    )
+
+    await call.message.edit_text(text, reply_markup=back_button())
+
+
+# =====================================================
+# 5. Подбор карты (FSM)
+# =====================================================
+
+class Choose(StatesGroup):
+    purpose = State()
+    cardtype = State()
+    anon = State()
+
+
+@dp.callback_query(lambda c: c.data == "choose_start")
+async def choose_start(call: types.CallbackQuery, state: FSMContext):
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Подписки", callback_data="p_subs")],
+        [InlineKeyboardButton(text="Покупки", callback_data="p_shop")],
+        [InlineKeyboardButton(text="Путешествия", callback_data="p_travel")],
+        [InlineKeyboardButton(text="Другое", callback_data="p_other")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="back")],
+    ])
+
+    await call.message.edit_text("Для чего вам нужна карта?", reply_markup=kb)
+    await state.set_state(Choose.purpose)
+
+
+@dp.callback_query(Choose.purpose)
+async def choose_purpose(call: types.CallbackQuery, state: FSMContext):
+
+    await state.update_data(purpose=call.data)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Виртуальная", callback_data="t_virtual")],
+        [InlineKeyboardButton(text="Пластиковая", callback_data="t_plastic")],
+        [InlineKeyboardButton(text="Не важно", callback_data="t_any")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="back")],
+    ])
+
+    await call.message.edit_text("Какой тип карты предпочитаете?", reply_markup=kb)
+    await state.set_state(Choose.cardtype)
+
+
+@dp.callback_query(Choose.cardtype)
+async def choose_type(call: types.CallbackQuery, state: FSMContext):
+
+    await state.update_data(cardtype=call.data)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Максимальная", callback_data="a_max")],
+        [InlineKeyboardButton(text="Средняя", callback_data="a_med")],
+        [InlineKeyboardButton(text="Не важно", callback_data="a_any")],
+        [InlineKeyboardButton(text="⬅ Назад", callback_data="back")],
+    ])
+
+    await call.message.edit_text("Насколько важна анонимность?", reply_markup=kb)
+    await state.set_state(Choose.anon)
+
+
+@dp.callback_query(Choose.anon)
+async def choose_finish(call: types.CallbackQuery, state: FSMContext):
+
+    await state.update_data(anon=call.data)
+    data = await state.get_data()
+
+    # Логика подбора
+    if data["purpose"] == "p_subs":
+        card = "⭐ Вам подойдёт Виртуальная USD-карта."
+    elif data["purpose"] == "p_travel":
+        card = "⭐ Пластиковая мультивалютная карта — лучший выбор."
     else:
-        # если менеджер не задан — сообщаем об этом
-        await update.callback_query.message.reply_text(
-            "⚠️ MANAGER_ID не задан. Уведомление менеджера не отправлено."
-        )
-    await update.callback_query.edit_message_text(
-        "👨‍💼 Ваш запрос отправлен менеджеру. Он свяжется с вами.", reply_markup=back_kb()
+        card = "⭐ Универсальная виртуальная карта — оптимальный вариант."
+
+    text_result = (
+        "<b>🎯 Результат подбора:</b>\n\n"
+        f"{card}\n\n"
+        "<i>Менеджер уже получил вашу заявку.</i>"
     )
 
-
-# ---------------- Подбор карты: мини-опрос через callback_data ---------------
-# структура в context.user_data:
-# context.user_data["choose"] = {"purpose": "...", "cardtype": "...", "anon": "..."}
-
-async def choose_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Подписки", callback_data="choose:purpose:p_subs")],
-        [InlineKeyboardButton("Покупки", callback_data="choose:purpose:p_shop")],
-        [InlineKeyboardButton("Путешествия", callback_data="choose:purpose:p_travel")],
-        [InlineKeyboardButton("Другое", callback_data="choose:purpose:p_other")],
-        [InlineKeyboardButton("⬅ Назад", callback_data="back")]
-    ])
-    await update.callback_query.edit_message_text("Для чего вам нужна карта?", reply_markup=kb)
-
-
-async def choose_purpose(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    # callback_data: choose:purpose:<value>
-    _, _, value = update.callback_query.data.split(":", maxsplit=2)
-    context.user_data.setdefault("choose", {})["purpose"] = value
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Виртуальная", callback_data="choose:cardtype:t_virtual")],
-        [InlineKeyboardButton("Пластиковая", callback_data="choose:cardtype:t_plastic")],
-        [InlineKeyboardButton("Не важно", callback_data="choose:cardtype:t_any")],
-        [InlineKeyboardButton("⬅ Назад", callback_data="back")],
-    ])
-    await update.callback_query.edit_message_text("Какой тип карты предпочитаете?", reply_markup=kb)
-
-
-async def choose_cardtype(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    _, _, value = update.callback_query.data.split(":", maxsplit=2)
-    context.user_data.setdefault("choose", {})["cardtype"] = value
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Максимальная", callback_data="choose:anon:a_max")],
-        [InlineKeyboardButton("Средняя", callback_data="choose:anon:a_med")],
-        [InlineKeyboardButton("Не важно", callback_data="choose:anon:a_any")],
-        [InlineKeyboardButton("⬅ Назад", callback_data="back")],
-    ])
-    await update.callback_query.edit_message_text("Насколько важна анонимность?", reply_markup=kb)
-
-
-async def choose_anon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    _, _, value = update.callback_query.data.split(":", maxsplit=2)
-    data = context.user_data.setdefault("choose", {})
-    data["anon"] = value
-
-    # простая логика подбора:
-    purpose = data.get("purpose")
-    card_recommendation = "⭐ Универсальная виртуальная карта — оптимальный выбор."
-    if purpose == "p_subs":
-        card_recommendation = "⭐ Вам подойдёт Виртуальная USD-карта."
-    elif purpose == "p_travel":
-        card_recommendation = "⭐ Пластиковая мультивалютная карта — лучший выбор."
-
-    result_text = (
-        "*🎯 Результат подбора:*\n\n"
-        f"{card_recommendation}\n\n"
-        "_Менеджер уже получил вашу заявку._"
-    )
-
-    # Формируем заявку и отправляем менеджеру
-    user = update.effective_user
+    # Формируем заявку
     req = (
-        "📩 *Новая заявка по подбору карты!*\n\n"
-        f"Пользователь: @{user.username if user.username else user.full_name} (ID: {user.id})\n"
-        f"Цель: {data.get('purpose')}\n"
-        f"Тип карты: {data.get('cardtype')}\n"
-        f"Анонимность: {data.get('anon')}\n"
+        "📩 Новая заявка!\n\n"
+        f"Пользователь: @{call.from_user.username}\n"
+        f"Цель: {data['purpose']}\n"
+        f"Тип карты: {data['cardtype']}\n"
+        f"Анонимность: {data['anon']}\n"
     )
 
-    if MANAGER_ID:
-        try:
-            await context.bot.send_message(MANAGER_ID, req, parse_mode="Markdown")
-        except Exception as e:
-            # уведомление пользователю о проблеме
-            await update.callback_query.message.reply_text(f"Не удалось уведомить менеджера: {e}")
-
-    # сохраняем историю
+    await bot.send_message(MANAGER_ID, req)
     REQUEST_HISTORY.append(req)
 
-    await update.callback_query.edit_message_text(result_text, reply_markup=back_kb(), parse_mode="Markdown")
-    # очищаем данные опроса
-    context.user_data.pop("choose", None)
+    await call.message.edit_text(text_result, reply_markup=back_button(), parse_mode="HTML")
+    await state.clear()
 
 
-# -------------- Назад: возвращаемся в меню ----------------
-async def back_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("Главное меню:", reply_markup=main_menu())
+# =====================================================
+# Кнопка НАЗАД
+# =====================================================
+@dp.callback_query(lambda c: c.data == "back")
+async def go_back(call: types.CallbackQuery):
+    await call.message.edit_text("Главное меню:", reply_markup=main_menu())
 
 
-# -------------- История заявок (команда /history) -------------
-async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    if MANAGER_ID is None or user.id != MANAGER_ID:
-        await update.message.reply_text("❌ Нет доступа.")
-        return
+# =====================================================
+# История заявок (только админ)
+# =====================================================
+@dp.message(Command("history"))
+async def history(message: types.Message):
+
+    if message.from_user.id != MANAGER_ID:
+        return await message.answer("❌ Нет доступа.")
 
     if not REQUEST_HISTORY:
-        await update.message.reply_text("История пуста.")
-        return
+        return await message.answer("История пуста.")
 
-    # Отправляем последние 20 заявок
-    text = "*📜 История заявок:* \n\n" + "\n\n".join(REQUEST_HISTORY[-20:])
-    # если очень длинно, разобьем на сообщения
-    MAX_LEN = 4000
-    if len(text) <= MAX_LEN:
-        await update.message.reply_text(text, parse_mode="Markdown")
-    else:
-        # простая нарезка
-        chunk = ""
-        for line in REQUEST_HISTORY[-20:]:
-            if len(chunk) + len(line) + 4 > MAX_LEN:
-                await update.message.reply_text(chunk, parse_mode="Markdown")
-                chunk = ""
-            chunk += line + "\n\n"
-        if chunk:
-            await update.message.reply_text(chunk, parse_mode="Markdown")
+    text = "📜 <b>История заявок:</b>\n\n" + "\n\n".join(REQUEST_HISTORY[-20:])
+    await message.answer(text, parse_mode="HTML")
 
-
-# -------------- Регистрация обработчиков ----------------
-def register_handlers(app):
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("history", history_cmd))
-
-    # callbacks (menu)
-    app.add_handler(CallbackQueryHandler(types_handler, pattern="^types$"))
-    app.add_handler(CallbackQueryHandler(purposes_handler, pattern="^purposes$"))
-    app.add_handler(CallbackQueryHandler(faq_handler, pattern="^faq$"))
-    app.add_handler(CallbackQueryHandler(manager_handler, pattern="^manager$"))
-
-    # choose flow
-    app.add_handler(CallbackQueryHandler(choose_start, pattern="^choose_start$"))
-    app.add_handler(CallbackQueryHandler(choose_purpose, pattern="^choose:purpose:"))
-    app.add_handler(CallbackQueryHandler(choose_cardtype, pattern="^choose:cardtype:"))
-    app.add_handler(CallbackQueryHandler(choose_anon, pattern="^choose:anon:"))
-
-    # back
-    app.add_handler(CallbackQueryHandler(back_handler, pattern="^back$"))
-
-
-# -------------- Запуск приложения ----------------
-async def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-    register_handlers(app)
-    print("Bot starting...")
-    await app.initialize()
-    # use polling — простая и надёжная опция
-    await app.start()
-    await app.updater.start_polling()
-    # блокируем текущий поток до остановки
-    await app.updater.idle()
-    await app.stop()
-    await app.shutdown()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 # =====================================================
-# Запуск
+# ЗАПУСК AIOGRAM
 # =====================================================
 async def main():
-    print("Bot is starting...")
+    print("Bot is starting on Render...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
